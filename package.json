@@ -1,0 +1,10 @@
+{
+  "name": "noteexam",
+  "version": "1.0.0",
+  "description": "NoteExam app",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'No build step required'"
+  },
+  "dependencies": {}
+}
