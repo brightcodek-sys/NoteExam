@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Deny all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable Hardened Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validation Helpers
+    function isValidExam(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+             data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 80 &&
+             data.difficulty in ['Standard', 'Honors', 'Quick Review'] &&
+             data.teacherOverview is string && data.teacherOverview.size() <= 1000 &&
+             data.pageCount is int && data.pageCount >= 1 && data.pageCount <= 10 &&
+             data.objectiveCount is int && data.objectiveCount >= 0 && data.objectiveCount <= 100 &&
+             data.theoryCount is int && data.theoryCount >= 0 && data.theoryCount <= 100 &&
+             (data.objectiveCount + data.theoryCount) <= 100 &&
+             data.objectiveAnsweredCount is int && data.objectiveAnsweredCount >= 0 && data.objectiveAnsweredCount <= data.objectiveCount &&
+             data.objectiveCorrectCount is int && data.objectiveCorrectCount >= 0 && data.objectiveCorrectCount <= data.objectiveCount &&
+             data.theoryMasteredCount is int && data.theoryMasteredCount >= 0 && data.theoryMasteredCount <= data.theoryCount;
+    }
+
+    function isValidQuestion(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             isValidId(data.examId) &&
+             data.questionNumber is int && data.questionNumber >= 1 && data.questionNumber <= 100 &&
+             data.questionType in ['OBJECTIVE', 'THEORY'] &&
+             data.topicTag is string && data.topicTag.size() >= 1 && data.topicTag.size() <= 80 &&
+             data.bloomLevel is string && data.bloomLevel.size() >= 1 && data.bloomLevel.size() <= 40 &&
+             data.promptText is string && data.promptText.size() >= 1 && data.promptText.size() <= 1500 &&
+             data.options is list && data.options.size() <= 4 &&
+             (data.options.size() == 0 || data.options[0] is string) &&
+             (data.questionType != 'OBJECTIVE' || (data.options.size() == 4 && data.correctOptionIndex >= 0 && data.correctOptionIndex <= 3)) &&
+             (data.questionType != 'THEORY' || (data.options.size() == 0 && data.correctOptionIndex == -1)) &&
+             data.correctOptionIndex is int && data.correctOptionIndex >= -1 && data.correctOptionIndex <= 3 &&
+             data.explanation is string && data.explanation.size() <= 1500 &&
+             data.marks is int && data.marks >= 1 && data.marks <= 30 &&
+             data.markingPoints is list && data.markingPoints.size() <= 8 &&
+             (data.markingPoints.size() == 0 || data.markingPoints[0] is string) &&
+             data.modelAnswer is string && data.modelAnswer.size() <= 2500 &&
+             data.selectedOptionIndex is int && data.selectedOptionIndex >= -1 && data.selectedOptionIndex <= 3 &&
+             data.studentTheoryAnswer is string && data.studentTheoryAnswer.size() <= 3000 &&
+             data.theoryGrade in ['UNGRADED', 'FULL', 'PARTIAL', 'REVIEW'];
+    }
+
+    // User-scoped Exams Collection
+    match /users/{userId}/exams/{examId} {
+      allow list: if isOwner(userId);
+      allow get, delete: if isOwner(userId) && isValidId(examId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(examId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'title', 'subject', 'difficulty', 'teacherOverview',
+                         'pageCount', 'objectiveCount', 'theoryCount',
+                         'objectiveAnsweredCount', 'objectiveCorrectCount', 'theoryMasteredCount',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'title', 'subject', 'difficulty', 'teacherOverview',
+                         'pageCount', 'objectiveCount', 'theoryCount',
+                         'objectiveAnsweredCount', 'objectiveCorrectCount', 'theoryMasteredCount',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidExam(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidExam(incoming()) &&
+                       isOwner(userId) &&
+                       isValidId(examId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       (
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'objectiveAnsweredCount', 'objectiveCorrectCount', 'theoryMasteredCount', 'updatedAt'
+                         ]) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'subject', 'updatedAt'
+                         ])
+                       );
+
+      // Exam Questions Subcollection (Parent-Gated via existsAfter for atomic WriteBatch creation)
+      match /questions/{questionId} {
+        allow list: if isOwner(userId) && isValidId(examId);
+        allow get, delete: if isOwner(userId) && isValidId(examId) && isValidId(questionId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(examId) &&
+                         isValidId(questionId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().examId == examId &&
+                         incoming().keys().hasAll([
+                           'userId', 'examId', 'questionNumber', 'questionType',
+                           'topicTag', 'bloomLevel', 'promptText', 'options',
+                           'correctOptionIndex', 'explanation', 'marks', 'markingPoints',
+                           'modelAnswer', 'selectedOptionIndex', 'studentTheoryAnswer',
+                           'theoryGrade', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'examId', 'questionNumber', 'questionType',
+                           'topicTag', 'bloomLevel', 'promptText', 'options',
+                           'correctOptionIndex', 'explanation', 'marks', 'markingPoints',
+                           'modelAnswer', 'selectedOptionIndex', 'studentTheoryAnswer',
+                           'theoryGrade', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidQuestion(incoming()) &&
+                         existsAfter(/databases/$(database)/documents/users/$(userId)/exams/$(examId));
+
+        allow update: if isSignedIn() &&
+                         isValidQuestion(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(examId) &&
+                         isValidId(questionId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().examId == existing().examId &&
+                         incoming().questionNumber == existing().questionNumber &&
+                         incoming().questionType == existing().questionType &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         (
+                           (existing().questionType == 'OBJECTIVE' &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['selectedOptionIndex', 'updatedAt'])) ||
+                           (existing().questionType == 'THEORY' &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['studentTheoryAnswer', 'theoryGrade', 'updatedAt']))
+                         );
+      }
+    }
+  }
+}

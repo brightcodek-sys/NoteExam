@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<resources>
+    <string name="firestore_database_id" translatable="false">ai-studio-android-noteexam-8251ffce-0afe-41ee-8048-98750fd15f4c</string>
+    <string name="recaptcha_site_key" translatable="false">6Lew8yYuAAAAALe7Q4hbJvl0JWoifgMwsN_Lp12m</string>
+</resources>

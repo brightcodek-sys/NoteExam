@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "Exam": {
+      "title": "Exam",
+      "description": "A 100-question teacher-generated exam derived from student note photographs.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Authenticated owner UID" },
+        "title": { "type": "string", "description": "Exam title" },
+        "subject": { "type": "string", "description": "Academic subject or course" },
+        "difficulty": {
+          "type": "string",
+          "enum": ["Standard", "Honors", "Quick Review"],
+          "description": "Exam difficulty level"
+        },
+        "teacherOverview": { "type": "string", "description": "Brief teacher summary of the scanned notes" },
+        "pageCount": { "type": "integer", "description": "Number of note pages scanned" },
+        "objectiveCount": { "type": "integer", "description": "Number of objective MCQ questions" },
+        "theoryCount": { "type": "integer", "description": "Number of theory essay questions" },
+        "objectiveAnsweredCount": { "type": "integer", "description": "Number of objective questions answered" },
+        "objectiveCorrectCount": { "type": "integer", "description": "Number of objective questions answered correctly" },
+        "theoryMasteredCount": { "type": "integer", "description": "Number of theory questions self-graded as full marks" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": [
+        "userId", "title", "subject", "difficulty", "teacherOverview",
+        "pageCount", "objectiveCount", "theoryCount",
+        "objectiveAnsweredCount", "objectiveCorrectCount", "theoryMasteredCount",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "ExamQuestion": {
+      "title": "ExamQuestion",
+      "description": "An individual objective or theory question inside an exam.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Authenticated owner UID" },
+        "examId": { "type": "string", "description": "Parent exam document ID" },
+        "questionNumber": { "type": "integer", "description": "1-based question number (1..100)" },
+        "questionType": {
+          "type": "string",
+          "enum": ["OBJECTIVE", "THEORY"],
+          "description": "Whether the question is objective MCQ or theory essay"
+        },
+        "topicTag": { "type": "string", "description": "Topic extracted from the student notes" },
+        "bloomLevel": { "type": "string", "description": "Bloom taxonomy cognitive level" },
+        "promptText": { "type": "string", "description": "The question prompt" },
+        "options": { "type": "array", "description": "4 options for objective questions, empty for theory" },
+        "correctOptionIndex": { "type": "integer", "description": "0..3 for objective, -1 for theory" },
+        "explanation": { "type": "string", "description": "Teacher explanation for objective answer" },
+        "marks": { "type": "integer", "description": "Marks allocated to this question" },
+        "markingPoints": { "type": "array", "description": "Up to 8 teacher marking scheme points for theory" },
+        "modelAnswer": { "type": "string", "description": "Teacher model answer for theory" },
+        "selectedOptionIndex": { "type": "integer", "description": "Student selected option (-1 if unanswered)" },
+        "studentTheoryAnswer": { "type": "string", "description": "Student written scratchpad answer for theory" },
+        "theoryGrade": {
+          "type": "string",
+          "enum": ["UNGRADED", "FULL", "PARTIAL", "REVIEW"],
+          "description": "Self-grade status for theory questions"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": [
+        "userId", "examId", "questionNumber", "questionType",
+        "topicTag", "bloomLevel", "promptText", "options",
+        "correctOptionIndex", "explanation", "marks", "markingPoints",
+        "modelAnswer", "selectedOptionIndex", "studentTheoryAnswer",
+        "theoryGrade", "createdAt", "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/exams/{examId}": {
+      "schema": { "$ref": "#/entities/Exam" },
+      "description": "User-owned generated 100-question exams"
+    },
+    "/users/{userId}/exams/{examId}/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/ExamQuestion" },
+      "description": "Individual objective and theory questions belonging to an exam"
+    }
+  }
+}

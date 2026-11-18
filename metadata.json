@@ -1,0 +1,6 @@
+{
+  "name": "NoteExam",
+  "description": "Scan study notes with your camera or photo library to generate 100 teacher-grade objective and theory exam questions, saved and synced with Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
