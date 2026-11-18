@@ -32,7 +32,7 @@ jobs:
       - name: Initialize Capacitor & Android platform
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init "NoteExam" "com.brightlogic.noteexam" --web-dir=dist --yes
+          npx cap init NoteExam com.brightlogic.noteexam --web-dir=dist
           npx cap add android
           npx cap sync android
 
